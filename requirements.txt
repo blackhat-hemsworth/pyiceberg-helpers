@@ -1,0 +1,4 @@
+pyarrow==18.0.0
+datetime~=5.3
+setuptools~=68.0.0
+pyiceberg[sql-postgres,glue,pyarrow]==0.8.1
