@@ -1,5 +1,5 @@
 flake8==7.1.0
-pytest==6.2.5
+pytest==8.3.4
 pytest-cov==2.12.1
 mypy===0.910
 tox===4.23.2
