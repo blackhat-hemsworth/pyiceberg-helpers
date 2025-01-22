@@ -8,7 +8,7 @@ class IdNotFound(Exception):
 
 
 # following https://juhache.substack.com/p/pyiceberg-current-state-and-roadmap
-def merge_into_ish(table: Table, data: pa.Table, max_attempts: int = 5, sleep_interval: int = 2) -> bool:
+def push_data(table: Table, data: pa.Table, mode: str = "merge", max_attempts: int = 5, sleep_interval: int = 2) -> bool:
     if len(data) == 0:
         return True
 
@@ -17,7 +17,10 @@ def merge_into_ish(table: Table, data: pa.Table, max_attempts: int = 5, sleep_in
     while attempts < max_attempts:
         try:
             table.refresh()
-            table.overwrite(data, overwrite_filter=f"id In ({','.join(str(i) for i in id_list)})")
+            if mode == "append":
+                table.append(data)
+            else:
+                table.overwrite(data, overwrite_filter=f"id In ({','.join(str(i) for i in id_list)})")
             return True
         except Exception:
             attempts += 1
@@ -25,7 +28,7 @@ def merge_into_ish(table: Table, data: pa.Table, max_attempts: int = 5, sleep_in
     return False
 
 
-def sync_table_schema_evolve(table_name: str, pa_table: pa.Table, catalog: Catalog, iceberg_dir: str) -> tuple[str, int]:
+def sync_table_schema_evolve(table_name: str, pa_table: pa.Table, catalog: Catalog, iceberg_dir: str, sync_type: str = "merge") -> tuple[str, int]:
     if "id" not in pa_table.column_names:
         raise IdNotFound()
 
@@ -38,7 +41,7 @@ def sync_table_schema_evolve(table_name: str, pa_table: pa.Table, catalog: Catal
     with ib_table.update_schema() as update:
         update.union_by_name(pa_table.schema)
 
-    if merge_into_ish(ib_table, pa_table):
+    if push_data(ib_table, pa_table, sync_type):
         return "success", pa_table.num_rows
     else:
         return "fail", -1

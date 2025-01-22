@@ -1,7 +1,7 @@
 import pytest
 from pyiceberg.catalog.sql import SqlCatalog
 import pyarrow as pa
-from pyiceberg_helpers.write import sync_table_schema_evolve, merge_into_ish, IdNotFound
+from pyiceberg_helpers.write import sync_table_schema_evolve, push_data, IdNotFound
 from pyiceberg_helpers.read import get_table_status
 import shutil
 import os
@@ -50,30 +50,59 @@ class TestIcebergCatalogFunctions:
         i = iceberg_cat.load_table("test.table")
         a = pa.Table.from_arrays(arrays=[pa.array([1, 4, 5], type=pa.int32()), pa.array(["a", "d", "e"])],
                                  names=["id", "some_string"])
-        merge_into_ish(i, a)
+        push_data(i, a)
         assert len(i.refresh().scan().to_arrow()) == 5
+
+    def test_append_new_rows(self, iceberg_cat):
+        i = iceberg_cat.load_table("test.table")
+        a = pa.Table.from_arrays(arrays=[pa.array([1, 4, 5], type=pa.int32()), pa.array(["a", "d", "e"])],
+                                 names=["id", "some_string"])
+        push_data(i, a, "append")
+        assert len(i.refresh().scan().to_arrow()) == 6
 
     def test_merge_same_rows(self, iceberg_cat):
         i = iceberg_cat.load_table("test.table")
         a = pa.Table.from_arrays(arrays=[pa.array([1, 2, 3], type=pa.int32()), pa.array(["a", "d", "e"])],
                                  names=["id", "some_string"])
-        merge_into_ish(i, a)
+        push_data(i, a)
         assert len(i.refresh().scan().to_arrow()) == 3
+
+    def test_append_same_rows(self, iceberg_cat):
+        i = iceberg_cat.load_table("test.table")
+        a = pa.Table.from_arrays(arrays=[pa.array([1, 2, 3], type=pa.int32()), pa.array(["a", "d", "e"])],
+                                 names=["id", "some_string"])
+        push_data(i, a, "append")
+        assert len(i.refresh().scan().to_arrow()) == 6
 
     def test_merge_no_rows(self, iceberg_cat):
         i = iceberg_cat.load_table("test.table")
         a = pa.Table.from_arrays(arrays=[pa.array([], type=pa.int32()), pa.array([], type=pa.string())],
                                  names=["id", "some_string"])
-        merge_into_ish(i, a)
+        push_data(i, a)
         assert len(i.refresh().scan().to_arrow()) == 3
 
-    def test_sync_iceberg_table_new_col(self, iceberg_cat):
+    def test_append_no_rows(self, iceberg_cat):
+        i = iceberg_cat.load_table("test.table")
+        a = pa.Table.from_arrays(arrays=[pa.array([], type=pa.int32()), pa.array([], type=pa.string())],
+                                 names=["id", "some_string"])
+        push_data(i, a, "append")
+        assert len(i.refresh().scan().to_arrow()) == 3
+
+    def test_sync_iceberg_table_new_col_merge(self, iceberg_cat):
         t = pa.Table.from_arrays(arrays=[pa.array([1, 2, 3], type=pa.int32()), pa.array(["a", "b", "c"])],
                                  names=["id", "action"])
-        r = sync_table_schema_evolve("test.table", t, iceberg_cat, "tests/tmp/warehouse/")
+        r = sync_table_schema_evolve("test.table", t, iceberg_cat, "tests/tmp/warehouse/", "merge")
         assert r[0] == "success"
         assert r[1] == 3
         assert len(iceberg_cat.load_table("test.table").scan().to_arrow()) == 3
+
+    def test_sync_iceberg_table_new_col_append(self, iceberg_cat):
+        t = pa.Table.from_arrays(arrays=[pa.array([1, 2, 3], type=pa.int32()), pa.array(["a", "b", "c"])],
+                                 names=["id", "action"])
+        r = sync_table_schema_evolve("test.table", t, iceberg_cat, "tests/tmp/warehouse/", "append")
+        assert r[0] == "success"
+        assert r[1] == 3
+        assert len(iceberg_cat.load_table("test.table").scan().to_arrow()) == 6
 
     def test_sync_iceberg_table_no_id(self, iceberg_cat):
         t = pa.Table.from_arrays(arrays=[pa.array([1, 2, 3], type=pa.int32()), pa.array(["a", "b", "c"])],
